@@ -25,21 +25,25 @@ On **curabiz-hospital-api** → **Environment**:
 |-----|--------|
 | `DATABASE_URL` | Supabase **transaction pooler** URI (`:6543` + `?pgbouncer=true`) |
 | `DIRECT_URL` | Supabase **direct** URI (`db.…supabase.co:5432`) |
-| `CORS_ORIGIN` | `https://curabiz-hospital-web.onrender.com` |
+| `CORS_ORIGIN` | `https://hospital-erp-ten.vercel.app` (your Vercel site) |
 | `RAZORPAY_KEY_ID` | optional until live payments |
 | `RAZORPAY_KEY_SECRET` | optional until live payments |
 
-## 4. Frontend API URL
+## 4. Frontend on Vercel
 
-Static site build uses:
+Site: [https://hospital-erp-ten.vercel.app](https://hospital-erp-ten.vercel.app/)
 
-`VITE_API_URL=https://curabiz-hospital-api.onrender.com/api`
+In Vercel → Project → **Settings** → **Environment Variables**:
 
-If Render assigns a different API hostname, update that env var and **redeploy** the static site (Vite bakes the URL at build time).
+| Key | Value |
+|-----|--------|
+| `VITE_API_URL` | `https://curabiz-hospital-api.onrender.com/api` |
+
+Then **Redeploy** the Vercel project (Vite bakes this in at build time).
 
 ## 5. Verify
 
 - API: `https://curabiz-hospital-api.onrender.com/api/health`
-- Site: `https://curabiz-hospital-web.onrender.com`
+- Site: `https://hospital-erp-ten.vercel.app`
 
 Free web services sleep after idle time — first request can take ~30–60s.
