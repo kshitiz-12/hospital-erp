@@ -33,17 +33,19 @@ On **curabiz-hospital-api** → **Environment**:
 
 Site: [https://hospital-erp-ten.vercel.app](https://hospital-erp-ten.vercel.app/)
 
+API primary URL: `https://hospital-erp-jqoc.onrender.com`
+
 In Vercel → Project → **Settings** → **Environment Variables**:
 
 | Key | Value |
 |-----|--------|
-| `VITE_API_URL` | `https://curabiz-hospital-api.onrender.com/api` |
+| `VITE_API_URL` | `https://hospital-erp-jqoc.onrender.com/api` |
 
 Then **Redeploy** the Vercel project (Vite bakes this in at build time).
 
 ## 5. Verify
 
-- API: `https://curabiz-hospital-api.onrender.com/api/health`
+- API: `https://hospital-erp-jqoc.onrender.com/api/health`
 - Site: `https://hospital-erp-ten.vercel.app`
 
 Free web services sleep after idle time — first request can take ~30–60s.

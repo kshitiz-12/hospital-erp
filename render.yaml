@@ -43,4 +43,4 @@ services:
         destination: /index.html
     envVars:
       - key: VITE_API_URL
-        value: https://curabiz-hospital-api.onrender.com/api
+        value: https://hospital-erp-jqoc.onrender.com/api
