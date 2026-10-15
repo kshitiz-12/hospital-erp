@@ -28,6 +28,7 @@ On **curabiz-hospital-api** → **Environment**:
 | `CORS_ORIGIN` | `https://hospital-erp-ten.vercel.app` (your Vercel site) |
 | `RAZORPAY_KEY_ID` | optional until live payments |
 | `RAZORPAY_KEY_SECRET` | optional until live payments |
+| `RAZORPAY_WEBHOOK_SECRET` | optional; Razorpay dashboard webhook secret for `payment.captured` → `/api/payments/webhook` |
 
 ## 4. Frontend on Vercel
 

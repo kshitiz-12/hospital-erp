@@ -3,7 +3,7 @@ import express from 'express'
 import cors from 'cors'
 import { doctorsRouter } from './routes/doctors'
 import { appointmentsRouter } from './routes/appointments'
-import { paymentsRouter } from './routes/payments'
+import { handleRazorpayWebhook, paymentsRouter } from './routes/payments'
 
 const app = express()
 const port = Number(process.env.PORT ?? 4000)
@@ -13,8 +13,28 @@ app.use(
   cors({
     origin: corsOrigin.split(',').map((s) => s.trim()),
     credentials: true,
+    allowedHeaders: ['Content-Type', 'Idempotency-Key'],
+    exposedHeaders: ['Idempotency-Key'],
   }),
 )
+
+// Webhook needs the raw body for HMAC verification (before json parser)
+app.post(
+  '/api/payments/webhook',
+  express.raw({ type: 'application/json' }),
+  async (req, res) => {
+    try {
+      const raw = Buffer.isBuffer(req.body) ? req.body : Buffer.from(String(req.body ?? ''))
+      const signature = req.header('x-razorpay-signature') ?? undefined
+      const result = await handleRazorpayWebhook(raw, signature)
+      res.status(result.status).json(result.body)
+    } catch (err) {
+      console.error('[POST /api/payments/webhook]', err)
+      res.status(500).json({ error: 'Webhook handler failed' })
+    }
+  },
+)
+
 app.use(express.json())
 
 app.get('/api/health', (_req, res) => {

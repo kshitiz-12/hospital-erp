@@ -3,7 +3,8 @@ import {
   createAppointment,
   createPaymentOrder,
   fetchPaymentConfig,
-  verifyPayment,
+  newIdempotencyKey,
+  verifyPaymentWithRetry,
   type CreateAppointmentPayload,
 } from './api'
 
@@ -52,9 +53,12 @@ export type BookingPaymentResult =
   | { ok: false; reason: string }
 
 /**
- * Creates the appointment in EHR tables, then opens Razorpay (or confirms free / simulated).
+ * Creates the appointment, then pays with idempotent Razorpay order + verify
+ * (or free / simulated confirm when keys are not configured).
  */
 export async function bookAndPay(input: BookingPaymentInput): Promise<BookingPaymentResult> {
+  const payKey = newIdempotencyKey('pay')
+
   try {
     const created = await createAppointment({
       doctorId: input.doctorId,
@@ -66,7 +70,7 @@ export async function bookAndPay(input: BookingPaymentInput): Promise<BookingPay
     })
 
     if (!created.requiresPayment || created.amount <= 0) {
-      const confirmed = await confirmFreeOrSimulated(created.appointmentId)
+      const confirmed = await confirmFreeOrSimulated(created.appointmentId, undefined, payKey)
       return {
         ok: true,
         bookingId: confirmed.bookingId,
@@ -80,7 +84,7 @@ export async function bookAndPay(input: BookingPaymentInput): Promise<BookingPay
     const config = await fetchPaymentConfig()
     if (!config.configured) {
       const simId = `pay_sim_${Date.now()}`
-      const confirmed = await confirmFreeOrSimulated(created.appointmentId, simId)
+      const confirmed = await confirmFreeOrSimulated(created.appointmentId, simId, payKey)
       return {
         ok: true,
         bookingId: confirmed.bookingId,
@@ -91,7 +95,19 @@ export async function bookAndPay(input: BookingPaymentInput): Promise<BookingPay
       }
     }
 
-    const order = await createPaymentOrder(created.appointmentId)
+    const order = await createPaymentOrder(created.appointmentId, payKey)
+
+    if (order.alreadyPaid) {
+      return {
+        ok: true,
+        bookingId: order.bookingId,
+        appointmentId: order.appointmentId,
+        paymentId: order.paymentId ?? 'ALREADY_PAID',
+        simulated: false,
+        amount: created.amount,
+      }
+    }
+
     const loaded = await loadRazorpayScript()
     if (!loaded || !window.Razorpay) {
       return { ok: false, reason: 'Could not load Razorpay Checkout. Check your network.' }
@@ -113,6 +129,7 @@ export async function bookAndPay(input: BookingPaymentInput): Promise<BookingPay
         notes: {
           appointmentId: String(created.appointmentId),
           bookingId: created.bookingId,
+          idempotencyKey: payKey,
         },
         theme: { color: '#0c69b6' },
         handler: async (response) => {
@@ -121,12 +138,15 @@ export async function bookAndPay(input: BookingPaymentInput): Promise<BookingPay
               resolve({ ok: false, reason: 'Incomplete Razorpay response' })
               return
             }
-            const verified = await verifyPayment({
-              appointmentId: created.appointmentId,
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-            })
+            const verified = await verifyPaymentWithRetry(
+              {
+                appointmentId: created.appointmentId,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+              },
+              payKey,
+            )
             resolve({
               ok: true,
               bookingId: verified.bookingId,
@@ -138,7 +158,10 @@ export async function bookAndPay(input: BookingPaymentInput): Promise<BookingPay
           } catch (err) {
             resolve({
               ok: false,
-              reason: err instanceof Error ? err.message : 'Payment verification failed',
+              reason:
+                err instanceof Error
+                  ? err.message
+                  : 'Payment may have succeeded — contact the hospital with your payment id.',
             })
           }
         },
@@ -146,7 +169,7 @@ export async function bookAndPay(input: BookingPaymentInput): Promise<BookingPay
           ondismiss: () =>
             resolve({
               ok: false,
-              reason: 'Payment cancelled. Your appointment is saved as pending — you can retry pay.',
+              reason: 'Payment cancelled. Your appointment is saved as pending — retry uses the same order.',
             }),
         },
       })
@@ -160,7 +183,7 @@ export async function bookAndPay(input: BookingPaymentInput): Promise<BookingPay
   }
 }
 
-/** @deprecated Use bookAndPay — kept for any leftover imports */
+/** @deprecated Use bookAndPay */
 export async function startRazorpayPayment() {
   return { ok: false as const, reason: 'Use bookAndPay instead' }
 }
