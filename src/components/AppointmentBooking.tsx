@@ -4,12 +4,26 @@ import {
   doctors,
   getDoctor,
   services,
-  timeSlots,
   type Doctor,
   type Service,
 } from '../data/hospital'
-import { startRazorpayPayment } from '../lib/razorpay'
+import {
+  formatOpdWeekdays,
+  nextOpdDays,
+  parseOpdWeekdays,
+  slotsForAvailableWindow,
+} from '../lib/opdSchedule'
+import { bookAndPay } from '../lib/razorpay'
 import { IconArrowRight, IconCalendar, IconCheck } from './Icons'
+
+/** Maps marketing site doctor slugs → seeded EHR `userdetails.EMPID` */
+const DOCTOR_DB_IDS: Record<string, number> = {
+  'dr-vikram': 10,
+  'dr-ishita': 11,
+  'dr-manav': 12,
+  'dr-aisha': 13,
+  'dr-rahul': 14,
+}
 
 type Step = 1 | 2 | 3 | 4 | 5
 
@@ -29,31 +43,6 @@ const steps: { id: Step; label: string }[] = [
   { id: 4, label: 'Details' },
   { id: 5, label: 'Pay' },
 ]
-
-function nextDays(count: number) {
-  const days: { value: string; label: string; sub: string }[] = []
-  const formatter = new Intl.DateTimeFormat('en-IN', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-  })
-  for (let i = 0; i < count; i++) {
-    const d = new Date()
-    d.setHours(12, 0, 0, 0)
-    d.setDate(d.getDate() + i)
-    const value = d.toISOString().slice(0, 10)
-    const parts = formatter.formatToParts(d)
-    const weekday = parts.find((p) => p.type === 'weekday')?.value ?? ''
-    const day = parts.find((p) => p.type === 'day')?.value ?? ''
-    const month = parts.find((p) => p.type === 'month')?.value ?? ''
-    days.push({
-      value,
-      label: i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : weekday,
-      sub: `${day} ${month}`,
-    })
-  }
-  return days
-}
 
 const emptyPatient: PatientForm = {
   name: '',
@@ -92,7 +81,36 @@ export function AppointmentBooking({ embedded = false }: AppointmentBookingProps
     }
   }, [searchParams])
 
-  const dates = useMemo(() => nextDays(7), [])
+  // Clear date/slot when doctor changes so invalid picks don't stick
+  useEffect(() => {
+    setDate('')
+    setSlot('')
+  }, [doctor?.id])
+
+  const dates = useMemo(
+    () => (doctor ? nextOpdDays(doctor.opdDays, 7) : []),
+    [doctor],
+  )
+
+  const availableSlots = useMemo(
+    () => (doctor ? slotsForAvailableWindow(doctor.available, 30) : []),
+    [doctor],
+  )
+
+  const opdDayLabel = useMemo(() => {
+    if (!doctor) return ''
+    const days = parseOpdWeekdays(doctor.opdDays)
+    return days.size ? formatOpdWeekdays(days) : doctor.opdDays
+  }, [doctor])
+
+  // Drop selected date/slot if it no longer matches this doctor
+  useEffect(() => {
+    if (date && !dates.some((d) => d.value === date)) setDate('')
+  }, [date, dates])
+
+  useEffect(() => {
+    if (slot && !availableSlots.includes(slot)) setSlot('')
+  }, [slot, availableSlots])
 
   const totalFee = useMemo(() => {
     if (!doctor || !service) return 0
@@ -125,20 +143,29 @@ export function AppointmentBooking({ embedded = false }: AppointmentBookingProps
 
   async function confirmAndPay() {
     if (!doctor || !service || !date || !slot) return
+    const doctorDbId = DOCTOR_DB_IDS[doctor.id]
+    if (!doctorDbId) {
+      setError('This doctor is not linked to the hospital database yet.')
+      return
+    }
+
     setPaying(true)
     setError('')
 
-    const result = await startRazorpayPayment({
-      amountInr: totalFee,
-      patientName: patient.name.trim(),
-      patientEmail: patient.email.trim(),
-      patientPhone: patient.phone.trim(),
+    const result = await bookAndPay({
+      doctorId: doctorDbId,
+      appDate: date,
+      appTime: slot,
+      amount: totalFee,
+      serviceName: service.name,
       description: `${service.name} with ${doctor.name}`,
-      notes: {
-        doctorId: doctor.id,
-        serviceId: service.id,
-        date,
-        slot,
+      patient: {
+        name: patient.name.trim(),
+        phone: patient.phone.trim(),
+        email: patient.email.trim(),
+        age: patient.age.trim(),
+        gender: patient.gender,
+        notes: patient.notes.trim(),
       },
     })
 
@@ -151,7 +178,7 @@ export function AppointmentBooking({ embedded = false }: AppointmentBookingProps
 
     setPaymentId(result.paymentId)
     setSimulated(result.simulated)
-    setBookingId(`CBH-${Date.now().toString().slice(-8)}`)
+    setBookingId(result.bookingId)
   }
 
   function reset() {
@@ -177,7 +204,7 @@ export function AppointmentBooking({ embedded = false }: AppointmentBookingProps
             </div>
             <h2 className="mt-5 font-serif text-3xl font-semibold text-cura-navy">Appointment confirmed</h2>
             <p className="mt-2 text-sm text-cura-slate">
-              We saved your booking locally. Razorpay live keys go in when you are ready.
+              Your appointment is saved in the hospital system. We will follow up on WhatsApp if needed.
             </p>
             <div className="mt-6 space-y-2 rounded-2xl bg-cura-soft p-5 text-left text-sm">
               <Row label="Booking ID" value={bookingId} />
@@ -189,7 +216,7 @@ export function AppointmentBooking({ embedded = false }: AppointmentBookingProps
               <Row label="Payment" value={paymentId} />
               {simulated && (
                 <p className="pt-2 text-xs font-semibold text-cura-orange">
-                  Simulated payment — set VITE_RAZORPAY_KEY_ID and create an order API to go live.
+                  Simulated payment — add Razorpay keys in server/.env to go live.
                 </p>
               )}
             </div>
@@ -220,7 +247,7 @@ export function AppointmentBooking({ embedded = false }: AppointmentBookingProps
               Schedule in a few clear steps
             </h2>
             <p className="mt-3 text-base text-cura-slate">
-              Doctor → service → slot → details → pay. Razorpay placeholders ready for live keys.
+              Doctor → service → slot → details → pay. Bookings save to the hospital EHR database.
             </p>
           </div>
         )}
@@ -334,49 +361,71 @@ export function AppointmentBooking({ embedded = false }: AppointmentBookingProps
                 </div>
               )}
 
-              {step === 3 && (
+              {step === 3 && doctor && (
                 <div>
-                  <h3 className="mb-4 flex items-center gap-2 text-lg font-bold text-cura-navy">
+                  <h3 className="mb-2 flex items-center gap-2 text-lg font-bold text-cura-navy">
                     <IconCalendar className="h-5 w-5 text-cura-blue" />
                     Pick date & time
                   </h3>
-                  <p className="mb-2 text-xs font-bold uppercase tracking-wider text-cura-muted">Date</p>
-                  <div className="flex gap-2 overflow-x-auto pb-2">
-                    {dates.map((d) => (
-                      <button
-                        key={d.value}
-                        type="button"
-                        onClick={() => setDate(d.value)}
-                        className={`min-w-[88px] rounded-2xl border px-3 py-3 text-center transition ${
-                          date === d.value
-                            ? 'border-cura-blue bg-cura-blue text-white'
-                            : 'border-cura-line bg-white hover:border-cura-blue/40'
-                        }`}
-                      >
-                        <span className="block text-xs font-bold">{d.label}</span>
-                        <span className="mt-1 block text-sm font-semibold">{d.sub}</span>
-                      </button>
-                    ))}
-                  </div>
+                  <p className="mb-4 text-sm text-cura-slate">
+                    {doctor.name}: OPD on <span className="font-semibold text-cura-navy">{opdDayLabel}</span>
+                    {' · '}
+                    <span className="font-semibold text-cura-navy">{doctor.available}</span>
+                  </p>
+                  <p className="mb-2 text-xs font-bold uppercase tracking-wider text-cura-muted">
+                    OPD dates
+                  </p>
+                  {dates.length === 0 ? (
+                    <p className="rounded-2xl border border-dashed border-cura-line bg-cura-soft/60 px-4 py-6 text-sm text-cura-slate">
+                      No upcoming OPD dates found for this doctor in the next few weeks.
+                    </p>
+                  ) : (
+                    <div className="flex gap-2 overflow-x-auto pb-2">
+                      {dates.map((d) => (
+                        <button
+                          key={d.value}
+                          type="button"
+                          onClick={() => {
+                            setDate(d.value)
+                            setSlot('')
+                          }}
+                          className={`min-w-[88px] rounded-2xl border px-3 py-3 text-center transition ${
+                            date === d.value
+                              ? 'border-cura-blue bg-cura-blue text-white'
+                              : 'border-cura-line bg-white hover:border-cura-blue/40'
+                          }`}
+                        >
+                          <span className="block text-xs font-bold">{d.label}</span>
+                          <span className="mt-1 block text-sm font-semibold">{d.sub}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <p className="mb-2 mt-5 text-xs font-bold uppercase tracking-wider text-cura-muted">
                     Available slots
                   </p>
-                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                    {timeSlots.map((t) => (
-                      <button
-                        key={t}
-                        type="button"
-                        onClick={() => setSlot(t)}
-                        className={`rounded-xl border px-2 py-2.5 text-xs font-bold transition sm:text-sm ${
-                          slot === t
-                            ? 'border-cura-blue bg-cura-blue text-white'
-                            : 'border-cura-line text-cura-navy hover:border-cura-blue/50'
-                        }`}
-                      >
-                        {t}
-                      </button>
-                    ))}
-                  </div>
+                  {availableSlots.length === 0 ? (
+                    <p className="rounded-2xl border border-dashed border-cura-line bg-cura-soft/60 px-4 py-6 text-sm text-cura-slate">
+                      No time slots configured for this doctor&apos;s OPD hours.
+                    </p>
+                  ) : (
+                    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                      {availableSlots.map((t) => (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => setSlot(t)}
+                          className={`rounded-xl border px-2 py-2.5 text-xs font-bold transition sm:text-sm ${
+                            slot === t
+                              ? 'border-cura-blue bg-cura-blue text-white'
+                              : 'border-cura-line text-cura-navy hover:border-cura-blue/50'
+                          }`}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -462,9 +511,8 @@ export function AppointmentBooking({ embedded = false }: AppointmentBookingProps
                     </div>
                   </div>
                   <p className="mt-4 rounded-xl border border-dashed border-cura-orange/40 bg-[#fff7f2] px-4 py-3 text-xs font-medium text-cura-slate">
-                    Razorpay placeholder is active. Free / zero-amount bookings confirm without checkout.
-                    Add <code className="font-bold">VITE_RAZORPAY_KEY_ID</code> and a create-order API for live
-                    payments.
+                    Payment runs through Razorpay when server keys are set. Zero-amount bookings confirm
+                    without checkout; otherwise a test simulation is used until keys are configured.
                   </p>
                   <button
                     type="button"

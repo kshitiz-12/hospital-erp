@@ -1,4 +1,11 @@
-/** Placeholder Razorpay helpers — wire real order APIs before going live. */
+import {
+  confirmFreeOrSimulated,
+  createAppointment,
+  createPaymentOrder,
+  fetchPaymentConfig,
+  verifyPayment,
+  type CreateAppointmentPayload,
+} from './api'
 
 export const RAZORPAY_KEY_PLACEHOLDER =
   import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_PLACEHOLDER_KEY'
@@ -29,68 +36,131 @@ export function loadRazorpayScript(): Promise<boolean> {
   })
 }
 
-export type PaymentIntent = {
-  amountInr: number
-  patientName: string
-  patientEmail: string
-  patientPhone: string
+export type BookingPaymentInput = CreateAppointmentPayload & {
   description: string
-  notes?: Record<string, string>
 }
 
-/**
- * Opens Razorpay Checkout when a real key + order_id are configured.
- * Until then, simulates a successful payment so the booking UI can be tested end-to-end.
- */
-export async function startRazorpayPayment(
-  intent: PaymentIntent,
-): Promise<{ ok: true; paymentId: string; simulated: boolean } | { ok: false; reason: string }> {
-  const isPlaceholder = RAZORPAY_KEY_PLACEHOLDER.includes('PLACEHOLDER')
+export type BookingPaymentResult =
+  | {
+      ok: true
+      bookingId: string
+      appointmentId: number
+      paymentId: string
+      simulated: boolean
+      amount: number
+    }
+  | { ok: false; reason: string }
 
-  if (isPlaceholder || intent.amountInr <= 0) {
-    await new Promise((r) => setTimeout(r, 900))
+/**
+ * Creates the appointment in EHR tables, then opens Razorpay (or confirms free / simulated).
+ */
+export async function bookAndPay(input: BookingPaymentInput): Promise<BookingPaymentResult> {
+  try {
+    const created = await createAppointment({
+      doctorId: input.doctorId,
+      appDate: input.appDate,
+      appTime: input.appTime,
+      amount: input.amount,
+      serviceName: input.serviceName,
+      patient: input.patient,
+    })
+
+    if (!created.requiresPayment || created.amount <= 0) {
+      const confirmed = await confirmFreeOrSimulated(created.appointmentId)
+      return {
+        ok: true,
+        bookingId: confirmed.bookingId,
+        appointmentId: confirmed.appointmentId,
+        paymentId: confirmed.paymentId,
+        simulated: false,
+        amount: created.amount,
+      }
+    }
+
+    const config = await fetchPaymentConfig()
+    if (!config.configured) {
+      const simId = `pay_sim_${Date.now()}`
+      const confirmed = await confirmFreeOrSimulated(created.appointmentId, simId)
+      return {
+        ok: true,
+        bookingId: confirmed.bookingId,
+        appointmentId: confirmed.appointmentId,
+        paymentId: confirmed.paymentId,
+        simulated: true,
+        amount: created.amount,
+      }
+    }
+
+    const order = await createPaymentOrder(created.appointmentId)
+    const loaded = await loadRazorpayScript()
+    if (!loaded || !window.Razorpay) {
+      return { ok: false, reason: 'Could not load Razorpay Checkout. Check your network.' }
+    }
+
+    return new Promise((resolve) => {
+      const rzp = new window.Razorpay!({
+        key: order.keyId || RAZORPAY_KEY_PLACEHOLDER,
+        amount: order.amount,
+        currency: order.currency,
+        name: 'Curabiz Hospital',
+        description: input.description,
+        order_id: order.orderId,
+        prefill: {
+          name: order.prefill.name || input.patient.name,
+          email: order.prefill.email || input.patient.email,
+          contact: order.prefill.contact || input.patient.phone,
+        },
+        notes: {
+          appointmentId: String(created.appointmentId),
+          bookingId: created.bookingId,
+        },
+        theme: { color: '#0c69b6' },
+        handler: async (response) => {
+          try {
+            if (!response.razorpay_order_id || !response.razorpay_signature) {
+              resolve({ ok: false, reason: 'Incomplete Razorpay response' })
+              return
+            }
+            const verified = await verifyPayment({
+              appointmentId: created.appointmentId,
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+            })
+            resolve({
+              ok: true,
+              bookingId: verified.bookingId,
+              appointmentId: verified.appointmentId,
+              paymentId: verified.paymentId,
+              simulated: false,
+              amount: created.amount,
+            })
+          } catch (err) {
+            resolve({
+              ok: false,
+              reason: err instanceof Error ? err.message : 'Payment verification failed',
+            })
+          }
+        },
+        modal: {
+          ondismiss: () =>
+            resolve({
+              ok: false,
+              reason: 'Payment cancelled. Your appointment is saved as pending — you can retry pay.',
+            }),
+        },
+      })
+      rzp.open()
+    })
+  } catch (err) {
     return {
-      ok: true,
-      paymentId: intent.amountInr <= 0 ? 'PAY_FREE_CONSULT' : `pay_sim_${Date.now()}`,
-      simulated: true,
+      ok: false,
+      reason: err instanceof Error ? err.message : 'Booking failed',
     }
   }
+}
 
-  const loaded = await loadRazorpayScript()
-  if (!loaded || !window.Razorpay) {
-    return { ok: false, reason: 'Could not load Razorpay Checkout. Check your network.' }
-  }
-
-  // TODO: Replace with your backend order creation:
-  // const order = await fetch('/api/razorpay/create-order', { method: 'POST', body: JSON.stringify({ amount: intent.amountInr * 100 }) }).then(r => r.json())
-  const orderId: string | undefined = undefined
-
-  return new Promise((resolve) => {
-    const rzp = new window.Razorpay!({
-      key: RAZORPAY_KEY_PLACEHOLDER,
-      amount: Math.round(intent.amountInr * 100),
-      currency: 'INR',
-      name: 'Curabiz Hospital',
-      description: intent.description,
-      order_id: orderId,
-      prefill: {
-        name: intent.patientName,
-        email: intent.patientEmail,
-        contact: intent.patientPhone,
-      },
-      notes: intent.notes,
-      theme: { color: '#0c69b6' },
-      handler: (response) => {
-        resolve({
-          ok: true,
-          paymentId: response.razorpay_payment_id,
-          simulated: false,
-        })
-      },
-      modal: {
-        ondismiss: () => resolve({ ok: false, reason: 'Payment cancelled' }),
-      },
-    })
-    rzp.open()
-  })
+/** @deprecated Use bookAndPay — kept for any leftover imports */
+export async function startRazorpayPayment() {
+  return { ok: false as const, reason: 'Use bookAndPay instead' }
 }

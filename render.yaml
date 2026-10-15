@@ -1,0 +1,46 @@
+# Render Blueprint — https://dashboard.render.com/blueprints
+# After first deploy: confirm DATABASE_URL / DIRECT_URL / Razorpay secrets in the dashboard.
+
+services:
+  - type: web
+    name: curabiz-hospital-api
+    runtime: node
+    region: singapore
+    plan: free
+    rootDir: server
+    buildCommand: npm install --include=dev && npx prisma generate && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false
+      - key: SYSTEM_USER_ID
+        value: "1"
+      - key: COMPANY_ID
+        value: "1"
+      - key: FINANCIAL_YEAR_ID
+        value: "1"
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+
+  - type: web
+    name: curabiz-hospital-web
+    runtime: static
+    rootDir: .
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        value: https://curabiz-hospital-api.onrender.com/api

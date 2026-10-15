@@ -1,0 +1,224 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+/// Matches EHR `medicalspecialties`
+model MedicalSpecialty {
+  id   Int     @id @default(autoincrement()) @map("ID")
+  name String? @map("NAME") @db.VarChar(255)
+
+  doctorVisits DoctorVisitDetails[]
+
+  @@map("medicalspecialties")
+}
+
+/// Matches EHR `userdetails` (doctors / staff)
+model UserDetails {
+  empId              Int       @id @default(autoincrement()) @map("EMPID")
+  firstName          String?   @map("FIRSTNAME") @db.VarChar(100)
+  lastName           String?   @map("LASTNAME") @db.VarChar(50)
+  middleName         String?   @map("MIDDLENAME") @db.VarChar(50)
+  age                String?   @map("AGE") @db.VarChar(3)
+  dob                DateTime? @map("DOB") @db.Date
+  status             Int?      @map("STATUS")
+  address            String?   @map("ADDRESS") @db.VarChar(500)
+  phoneNumber        String?   @map("PHONENUMBER") @db.VarChar(10)
+  emailId            String?   @map("EMAILID") @db.VarChar(255)
+  gender             String?   @map("GENDER") @db.VarChar(1)
+  employmentDate     DateTime? @map("EMPLOYMENTDATE") @db.Date
+  mobileNumber       String?   @map("MOBILENUMBER") @db.VarChar(10)
+  accountNumber      String?   @map("ACCOUNTNUMBER") @db.VarChar(45)
+  bankName           String?   @map("BANKNAME") @db.VarChar(50)
+  createdBy          Int?      @default(0) @map("CREATEDBY")
+  updatedBy          Int?      @default(0) @map("UPDATEDBY")
+  userId             String    @unique @map("USERID") @db.VarChar(45)
+  userRole           Int?      @map("USERROLE")
+  saltValue          String?   @map("SALTVALUE") @db.VarChar(45)
+  companyId          Int?      @map("COMPANYID")
+  maritalStatus      Int?      @default(0) @map("MARITALSTATUS")
+  panCardNumber      String?   @map("PANCARDNUMBER") @db.VarChar(45)
+  aadhaarCardNumber  String?   @map("AADHAARCARDNUMBER") @db.VarChar(45)
+  bankId             Int?      @default(0) @map("BANKID")
+  guarantor          String?   @map("GUARANTOR") @db.VarChar(255)
+  sqId               Int?      @map("SQID")
+  sqAns              String?   @map("SQANS") @db.VarChar(255)
+  ifscCode           String?   @map("IFSCCODE") @db.VarChar(45)
+  commission         String?   @map("COMMISSION") @db.VarChar(45)
+  salary             String?   @map("SALARY") @db.VarChar(45)
+  transactionDate    Int?      @default(0) @map("TRANSACTIONDATE")
+  isRep              Int?      @default(1) @map("ISREP")
+  specialtyId        Int?      @default(0) @map("SPECIALTYID")
+  registrationNumber String?   @map("REGISTRATIONNUMBER") @db.VarChar(125)
+  qualification      String?   @map("QUALIFICATION") @db.VarChar(512)
+  defaultUser        Int?      @map("DEFAULTUSER")
+  businessName       String?   @map("BUSINESSNAME") @db.VarChar(45)
+  doctorTypes        String?   @map("DOCTORTYPES") @db.VarChar(90)
+
+  visitDetails DoctorVisitDetails?
+  appointments Appointment[]
+
+  @@map("userdetails")
+}
+
+/// Matches EHR `doctorvisitdetails`
+model DoctorVisitDetails {
+  doctorId             Int      @id @map("DOCTORID")
+  specialityId         Int?     @map("SPECIALITYID")
+  appointmentFee       Decimal? @map("APPOINTMENTFEE") @db.Decimal(10, 2)
+  opdDays              String?  @map("OPDDAYS") @db.VarChar(512)
+  fromMorningTime      String?  @map("FROMMORNINGTIME") @db.VarChar(45)
+  toMorningTime        String?  @map("TOMORNINGTIME") @db.VarChar(45)
+  fromEveningTime      String?  @map("FROMEVENINGTIME") @db.VarChar(45)
+  toEveningTime        String?  @map("TOEVENINGTIME") @db.VarChar(45)
+  emergencyFee         Decimal? @map("EMERGENCYFEE") @db.Decimal(10, 2)
+  followUpFee          Decimal? @default(0) @map("FOLLOWUPFEE") @db.Decimal(10, 2)
+  onlineFee            Decimal? @default(0) @map("ONLINEFEE") @db.Decimal(10, 2)
+  fromAfternoonTime    String?  @map("FROMAFTERNOONTIME") @db.VarChar(45)
+  toAfternoonTime      String?  @map("TOAFTERNOONTIME") @db.VarChar(45)
+  onCallAppointmentFee Decimal? @default(0) @map("ONCALLAPPOINTMENTFEE") @db.Decimal(10, 2)
+  degreeOne            String?  @map("DEGREEONE") @db.VarChar(1024)
+  degreeTwo            String?  @map("DEGREETWO") @db.VarChar(1024)
+  degreeThree          String?  @map("DEGREETHREE") @db.VarChar(1024)
+  degreeFour           String?  @map("DEGREEFOUR") @db.VarChar(1024)
+
+  doctor    UserDetails        @relation(fields: [doctorId], references: [empId])
+  specialty MedicalSpecialty?  @relation(fields: [specialityId], references: [id])
+
+  @@map("doctorvisitdetails")
+}
+
+/// Matches EHR `customer` (patients)
+model Customer {
+  id                   Int       @id @default(autoincrement()) @map("ID")
+  name                 String?   @map("NAME") @db.VarChar(255)
+  address              String?   @map("ADDRESS") @db.VarChar(255)
+  cityId               Int?      @map("CITYID")
+  stateId              Int?      @map("STATEID")
+  countryId            Int?      @map("COUNTRYID")
+  pincode              String?   @map("PINCODE") @db.VarChar(10)
+  phoneNumber          String?   @map("PHONENUMBER") @db.VarChar(15)
+  mobileNumber         String?   @map("MOBILENUMBER") @db.VarChar(15)
+  emailId              String?   @map("EMAILID") @db.VarChar(255)
+  dateOfBirth          DateTime? @map("DATEOFBIRTH") @db.Date
+  spouseDateOfBirth    DateTime? @map("SPOUSEDATEOFBIRTH") @db.Date
+  marriageAnniversary  DateTime? @map("MARRIAGEANNIVERSARY") @db.Date
+  createdBy            Int       @map("CREATEDBY")
+  updatedBy            Int?      @map("UPDATEDBY")
+  status               Int?      @map("STATUS")
+  panCard              String?   @map("PANCARD") @db.VarChar(10)
+  aadharCard           String?   @map("AADHARCARD") @db.VarChar(12)
+  customerType         Int?      @default(0) @map("CUSTOMERTYPE")
+  gstNumber            String?   @map("GSTNUMBER") @db.VarChar(30)
+  companyId            Int?      @map("COMPANYID")
+  transactionDate      Int?      @default(0) @map("TRANSACTIONDATE")
+  isRep                Int?      @default(1) @map("ISREP")
+  isDefault            Int?      @default(0) @map("ISDEFAULT")
+  referredBy           Int?      @default(0) @map("REFERREDBY")
+  genderId             Int?      @default(0) @map("GENDERID")
+  uhid                 Int?      @unique @map("UHID")
+  age                  String?   @map("AGE") @db.VarChar(255)
+  fatherName           String?   @map("FATHERNAME") @db.VarChar(255)
+  height               Decimal?  @default(0) @map("HEIGHT") @db.Decimal(10, 2)
+  weight               Decimal?  @default(0) @map("WEIGHT") @db.Decimal(10, 3)
+  temperature          Decimal?  @default(0) @map("TEMPERATURE") @db.Decimal(10, 2)
+  createdDate          DateTime? @map("CREATEDDATE") @db.Date
+  bloodGroup           String?   @map("BLOODGROUP") @db.VarChar(45)
+  insuranceCompanyId   Int?      @default(0) @map("INSURANCECOMPANYID")
+  preTitle             String?   @map("PRETITLE") @db.VarChar(45)
+  postTitle            String?   @map("POSTTITLE") @db.VarChar(45)
+  howDidYouHearAboutUs String?   @map("HOWDIDYOUHEARABOUTUS") @db.VarChar(512)
+  whatsapp             String?   @map("WHATSAPP") @db.VarChar(45)
+  deleteComments       String?   @map("DELETECOMMENTS") @db.VarChar(512)
+  deletedBy            Int?      @default(0) @map("DELETEDBY")
+  deleteDate           DateTime? @map("DELETEDATE") @db.Date
+  deleteTime           String?   @map("DELETETIME") @db.VarChar(45)
+
+  opdAppointments Appointment[] @relation("OpdPatient")
+
+  @@map("customer")
+}
+
+/// Matches EHR `appointment`
+/// STATUS: 0=pending payment, 1=confirmed/paid, 2=cancelled (website convention)
+model Appointment {
+  id                 Int       @id @default(autoincrement()) @map("ID")
+  financialYearId    Int?      @default(0) @map("FINANCIALYEARID")
+  companyId          Int?      @default(0) @map("COMPANYID")
+  dayBookId          Int?      @default(0) @map("DAYBOOKID")
+  discount           Decimal?  @default(0) @map("DISCOUNT") @db.Decimal(20, 2)
+  amount             Decimal?  @default(0) @map("AMOUNT") @db.Decimal(20, 2)
+  appDate            DateTime? @map("APPDATE") @db.Date
+  appTime            String?   @map("APPTIME") @db.VarChar(45)
+  ipdPatientId       Int?      @default(0) @map("IPDPATIENTID")
+  opdPatientId       Int?      @map("OPDPATIENTID")
+  doctorId           Int?      @map("DOCTORID")
+  chiefComplaint     String?   @map("CHIEFCOMPLAINT") @db.Text
+  referredBy         Int?      @map("REFERREDBY")
+  createdBy          Int?      @default(0) @map("CREATEDBY")
+  updatedBy          Int?      @default(0) @map("UPDATEDBY")
+  status             Int?      @default(0) @map("STATUS")
+  systemTimestamp    DateTime  @default(now()) @updatedAt @map("SYSTEMTIMESTAMP")
+  dataFreezeId       Int?      @default(0) @map("DATAFREEZEID")
+  appointmentType    Int?      @default(0) @map("APPOINTMENTTYPE")
+  serialNo           Int?      @default(0) @map("SERIALNO")
+  dailySerialNo      Int?      @default(0) @map("DAILYSERIALNO")
+  comments           String?   @map("COMMENTS") @db.VarChar(45)
+  amountReceived     Decimal?  @map("AMOUNTRECEIVED") @db.Decimal(20, 2)
+  revertAmount       Decimal?  @default(0) @map("REVERTAMOUNT") @db.Decimal(20, 2)
+  revertComments     String?   @map("REVERTCOMMENTS") @db.VarChar(45)
+  ipdRegisterNo      Int?      @default(0) @map("IPDREGISTERNO")
+  admissionDate      DateTime? @map("ADMISSIONDATE") @db.Date
+  admissionTime      DateTime? @map("ADMISSIONTIME") @db.Time(0)
+  admissionId        Int?      @default(0) @map("ADMISSIONID")
+  dischargeStatus    Int?      @default(0) @map("DISCHARGESTATUS")
+  prescriptionId     Int?      @default(0) @map("PRESCRYPTIONID")
+  cancelComments     String?   @map("CANCELCOMMENTS") @db.VarChar(45)
+  cancelDate         DateTime? @map("CANCELDATE") @db.Date
+  cancelTime         String?   @map("CANCELTIME") @db.VarChar(90)
+  dayCareAdmissionId Int?      @default(0) @map("DAYCAREADMISSIONID")
+
+  doctor   UserDetails?                 @relation(fields: [doctorId], references: [empId])
+  patient  Customer?                    @relation("OpdPatient", fields: [opdPatientId], references: [id])
+  payments AppointmentPaymentDetails[]
+
+  @@map("appointment")
+}
+
+/// Matches EHR `appointmentpaymentdetails`
+/// PAYMENTMETHOD: 1=Cash, 5=Razorpay/Online (website convention)
+model AppointmentPaymentDetails {
+  id                           Int      @id @default(autoincrement()) @map("ID")
+  dayBookId                    Int      @default(0) @map("DAYBOOKID")
+  appointmentId                Int      @map("APPOINTMENTID")
+  paymentMethod                Int      @map("PAYMENTMETHOD")
+  amount                       Decimal  @map("AMOUNT") @db.Decimal(15, 2)
+  bankId                       Int?     @default(0) @map("BANKID")
+  chequeNumber                 String?  @map("CHEQUENUMBER") @db.VarChar(100)
+  creditCardNumber             String?  @map("CREDITCARDNUMBER") @db.VarChar(4)
+  createdBy                    Int      @map("CREATEDBY")
+  updatedBy                    Int?     @map("UPDATEDBY")
+  commission                   String?  @map("COMMISION") @db.VarChar(45)
+  commissionAmount             Decimal? @map("COMMISIONAMOUNT") @db.Decimal(10, 2)
+  companyId                    Int?     @default(0) @map("COMPANYID")
+  financialYearId              Int?     @default(0) @map("FINANCIALYEARID")
+  saleTo                       Int?     @default(0) @map("SALETO")
+  bankName                     String?  @map("BANKNAME") @db.VarChar(45)
+  ccTransactionId              String?  @map("CCTRANSACTIONID") @db.VarChar(45)
+  deductCommissionFromCustomer Int?     @default(0) @map("DEDUCTCOMMISSIONFROMCUSTOMER")
+  isCommission                 Int?     @default(0) @map("ISCOMMISION")
+  edcId                        Int?     @default(0) @map("EDCID")
+  chequeClearingHouseId        Int?     @default(0) @map("CHEQUECLEARINGHOUSEID")
+  isRep                        Int      @default(1) @map("ISREP")
+  commissionNarration          String?  @map("COMMISIONNARRATION") @db.VarChar(255)
+  transactionDate              Int?     @default(0) @map("TRANSACTIONDATE")
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id])
+
+  @@map("appointmentpaymentdetails")
+}

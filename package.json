@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:api": "npm --prefix server run dev",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "db:setup": "npm --prefix server run db:setup"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
