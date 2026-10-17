@@ -12,6 +12,7 @@ import {
   verifyPaymentSignature,
   verifyWebhookSignature,
 } from '../lib/razorpay'
+import { notifyAppointmentBooked } from '../lib/whatsapp'
 import { isRazorpayOrderId, readIdempotencyKey } from '../utils/idempotency'
 import {
   companyId,
@@ -318,6 +319,10 @@ paymentsRouter.post('/verify', async (req, res) => {
       return
     }
 
+    if (!result.alreadyConfirmed) {
+      notifyAppointmentBooked(result.appointmentId, result.bookingId)
+    }
+
     res.json({
       ok: true,
       alreadyConfirmed: result.alreadyConfirmed,
@@ -462,6 +467,8 @@ paymentsRouter.post('/confirm-free', async (req, res) => {
       })
     }
 
+    notifyAppointmentBooked(body.appointmentId, `CBH-${body.appointmentId}`)
+
     res.json({
       ok: true,
       alreadyConfirmed: false,
@@ -533,6 +540,10 @@ export async function handleRazorpayWebhook(
   if (!result.ok) {
     // Still 200 to avoid Razorpay endless retries on business conflicts
     return { status: 200, body: { ok: false, error: result.reason } }
+  }
+
+  if (!result.alreadyConfirmed) {
+    notifyAppointmentBooked(result.appointmentId, result.bookingId)
   }
 
   return {
