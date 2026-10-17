@@ -302,7 +302,7 @@ export const bookingSteps = [
   { title: 'Choose doctor', body: 'See specialisation, OPD days and consult fee before you book.' },
   { title: 'Pick service & slot', body: 'Select new visit, follow-up or package and a convenient time.' },
   { title: 'Share patient details', body: 'Name, phone and basic history for smooth registration at the counter.' },
-  { title: 'Pay & confirm', body: 'Razorpay-ready payment placeholder — confirm booking instantly.' },
+  { title: 'Pay & confirm', body: 'Pay securely and receive your booking confirmation.' },
 ]
 
 export const faqs = [

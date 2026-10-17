@@ -50,7 +50,7 @@ export type BookingPaymentResult =
       simulated: boolean
       amount: number
     }
-  | { ok: false; reason: string }
+  | { ok: false; reason: string; cancelled?: boolean }
 
 /**
  * Creates the appointment, then pays with idempotent Razorpay order + verify
@@ -169,7 +169,8 @@ export async function bookAndPay(input: BookingPaymentInput): Promise<BookingPay
           ondismiss: () =>
             resolve({
               ok: false,
-              reason: 'Payment cancelled. Your appointment is saved as pending — retry uses the same order.',
+              cancelled: true,
+              reason: 'Payment was not completed.',
             }),
         },
       })

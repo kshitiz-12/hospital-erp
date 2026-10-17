@@ -67,9 +67,9 @@ export function AppointmentBooking({ embedded = false }: AppointmentBookingProps
   const [patient, setPatient] = useState<PatientForm>(emptyPatient)
   const [paying, setPaying] = useState(false)
   const [error, setError] = useState('')
+  const [paymentCancelled, setPaymentCancelled] = useState(false)
   const [bookingId, setBookingId] = useState('')
   const [paymentId, setPaymentId] = useState('')
-  const [simulated, setSimulated] = useState(false)
 
   useEffect(() => {
     const doctorId = searchParams.get('doctor')
@@ -129,6 +129,7 @@ export function AppointmentBooking({ embedded = false }: AppointmentBookingProps
 
   function goNext() {
     setError('')
+    setPaymentCancelled(false)
     if (!canNext) {
       setError('Please complete this step to continue.')
       return
@@ -138,6 +139,7 @@ export function AppointmentBooking({ embedded = false }: AppointmentBookingProps
 
   function goBack() {
     setError('')
+    setPaymentCancelled(false)
     setStep((s) => (s > 1 ? ((s - 1) as Step) : s))
   }
 
@@ -151,6 +153,7 @@ export function AppointmentBooking({ embedded = false }: AppointmentBookingProps
 
     setPaying(true)
     setError('')
+    setPaymentCancelled(false)
 
     const result = await bookAndPay({
       doctorId: doctorDbId,
@@ -172,12 +175,12 @@ export function AppointmentBooking({ embedded = false }: AppointmentBookingProps
     setPaying(false)
 
     if (!result.ok) {
-      setError(result.reason)
+      if (result.cancelled) setPaymentCancelled(true)
+      else setError(result.reason)
       return
     }
 
     setPaymentId(result.paymentId)
-    setSimulated(result.simulated)
     setBookingId(result.bookingId)
   }
 
@@ -189,9 +192,9 @@ export function AppointmentBooking({ embedded = false }: AppointmentBookingProps
     setSlot('')
     setPatient(emptyPatient)
     setError('')
+    setPaymentCancelled(false)
     setBookingId('')
     setPaymentId('')
-    setSimulated(false)
   }
 
   if (bookingId) {
@@ -214,11 +217,6 @@ export function AppointmentBooking({ embedded = false }: AppointmentBookingProps
               <Row label="Patient" value={patient.name} />
               <Row label="Amount" value={totalFee === 0 ? 'Pay at hospital' : `₹${totalFee}`} />
               <Row label="Payment" value={paymentId} />
-              {simulated && (
-                <p className="pt-2 text-xs font-semibold text-cura-orange">
-                  Simulated payment — add Razorpay keys in server/.env to go live.
-                </p>
-              )}
             </div>
             <button
               type="button"
@@ -510,10 +508,43 @@ export function AppointmentBooking({ embedded = false }: AppointmentBookingProps
                       <span>{totalFee === 0 ? 'Pay at hospital' : `₹${totalFee}`}</span>
                     </div>
                   </div>
-                  <p className="mt-4 rounded-xl border border-dashed border-cura-orange/40 bg-[#fff7f2] px-4 py-3 text-xs font-medium text-cura-slate">
-                    Payment runs through Razorpay when server keys are set. Zero-amount bookings confirm
-                    without checkout; otherwise a test simulation is used until keys are configured.
-                  </p>
+                  {paymentCancelled && (
+                    <div className="mt-4 overflow-hidden rounded-2xl border border-cura-line bg-white shadow-sm">
+                      <div className="bg-gradient-to-r from-cura-navy to-cura-blue px-5 py-4 text-white">
+                        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/70">
+                          Checkout closed
+                        </p>
+                        <p className="mt-1 font-serif text-2xl font-semibold">No payment was taken</p>
+                      </div>
+                      <div className="space-y-3 px-5 py-4 text-sm text-cura-slate">
+                        <p>
+                          Your details are still here. Pay when you are ready, or step back and change the doctor,
+                          time, or patient information.
+                        </p>
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={confirmAndPay}
+                            disabled={paying}
+                            className="rounded-full bg-cura-orange px-4 py-2.5 text-sm font-bold text-white hover:bg-cura-orange-dark disabled:opacity-60"
+                          >
+                            {paying ? 'Opening checkout…' : `Pay ₹${totalFee}`}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPaymentCancelled(false)
+                              setStep(1)
+                            }}
+                            className="rounded-full border border-cura-line px-4 py-2.5 text-sm font-bold text-cura-navy hover:border-cura-blue/40"
+                          >
+                            Change details
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {!paymentCancelled && (
                   <button
                     type="button"
                     disabled={paying}
@@ -527,6 +558,7 @@ export function AppointmentBooking({ embedded = false }: AppointmentBookingProps
                         : `Pay ₹${totalFee} & confirm`}
                     {!paying && <IconArrowRight className="h-4 w-4" />}
                   </button>
+                  )}
                 </div>
               )}
 

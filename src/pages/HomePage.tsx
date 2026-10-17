@@ -57,7 +57,7 @@ export function HomePage() {
                 <div className="max-w-xl">
                   <h2 className="font-serif text-3xl font-semibold">Book your hospital visit today</h2>
                   <p className="mt-2 text-sm text-white/80">
-                    Choose doctor, service and slot online. Razorpay placeholder is ready for live payment keys.
+                    Choose doctor, service and slot online, then pay to confirm.
                   </p>
                 </div>
                 <Link
